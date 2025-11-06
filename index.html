@@ -130,7 +130,7 @@
       }
     }
 
-    function adicionarMarcaDagua(file, callback) {
+        function adicionarMarcaDagua(file, callback) {
       const reader = new FileReader();
       reader.onload = ev => {
         const img = new Image();
@@ -140,13 +140,48 @@
           canvas.width = img.width;
           canvas.height = img.height;
           ctx.drawImage(img, 0, 0);
-          ctx.font = 'bold 40px Arial';
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    
+          // Configuração do texto
+          const fontSize = Math.max(30, img.width / 20);
+          ctx.font = `bold ${fontSize}px Arial`;
           ctx.textAlign = 'left';
-          ctx.fillText('ENTREGUE', 30, img.height - 100);
-          ctx.font = '30px Arial';
-          ctx.fillText(formatarDataHora(), 30, img.height - 60);
-          ctx.fillText(`${lat}, ${lng}`, 30, img.height - 20);
+    
+          // FUNDO SEMITRANSPARENTE (opcional, melhora contraste)
+          const textX = 30;
+          const textY1 = img.height - 100;
+          const textY2 = img.height - 60;
+          const textY3 = img.height - 20;
+    
+          // Texto 1: ENTREGUE
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'; // fundo preto semitransparente
+          ctx.fillRect(textX - 10, textY1 - fontSize, ctx.measureText('ENTREGUE').width + 20, fontSize + 10);
+          ctx.fillStyle = 'white';
+          ctx.strokeStyle = 'black';
+          ctx.lineWidth = 3;
+          ctx.strokeText('ENTREGUE', textX, textY1);
+          ctx.fillText('ENTREGUE', textX, textY1);
+    
+          // Texto 2: Data/Hora
+          ctx.font = `${fontSize * 0.8}px Arial`;
+          const dataHora = formatarDataHora();
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+          ctx.fillRect(textX - 10, textY2 - (fontSize * 0.8), ctx.measureText(dataHora).width + 20, fontSize * 0.8 + 10);
+          ctx.fillStyle = 'white';
+          ctx.strokeStyle = 'black';
+          ctx.lineWidth = 2;
+          ctx.strokeText(dataHora, textX, textY2);
+          ctx.fillText(dataHora, textX, textY2);
+    
+          // Texto 3: GPS
+          const gps = `${lat}, ${lng}`;
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+          ctx.fillRect(textX - 10, textY3 - (fontSize * 0.8), ctx.measureText(gps).width + 20, fontSize * 0.8 + 10);
+          ctx.fillStyle = 'white';
+          ctx.strokeStyle = 'black';
+          ctx.lineWidth = 2;
+          ctx.strokeText(gps, textX, textY3);
+          ctx.fillText(gps, textX, textY3);
+    
           canvas.toBlob(blob => {
             const novoArquivo = new File([blob], file.name, { type: 'image/jpeg' });
             callback(novoArquivo);
