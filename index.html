@@ -68,7 +68,7 @@
   </div>
 
   <script>
-    // URL DO SEU WEB APP (ATUALIZADA!)
+    // URL DO SEU WEB APP
     const URL = 'https://script.google.com/macros/s/AKfycbxreTNQhJvHtbECyk7oj3Oi5qzIIaG-bQmIjYJdXtDHQ38syCn52iOgzhscDSvjYlE_KA/exec';
 
     let fotos = [], lat = null, lng = null, gpsPronto = false;
@@ -115,10 +115,11 @@
       fetch(URL, {
         method: 'POST',
         body: JSON.stringify(dados),
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }  // ← CORREÇÃO: text/plain
       })
-      .then(r => r.json())
-      .then(data => {
+      .then(r => r.text())  // ← CORREÇÃO: r.text()
+      .then(t => {
+        const data = JSON.parse(t);  // ← Parse manual
         btn.disabled = false;
         if (data.status === "OK") {
           placaAutorizada = true;
@@ -278,10 +279,18 @@
           fetch(URL, {
             method: 'POST',
             body: JSON.stringify(dados),
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' }  // ← CORREÇÃO: text/plain
           })
-          .then(() => atualizarProgresso())
-          .catch(() => atualizarProgresso());
+          .then(r => r.text())  // ← CORREÇÃO: r.text()
+          .then(t => {
+            const data = JSON.parse(t);  // ← Parse manual
+            if (data.status !== "OK") console.error("Erro no envio da foto:", data.message);
+            atualizarProgresso();
+          })
+          .catch(err => {
+            console.error("Erro no fetch:", err);
+            atualizarProgresso();
+          });
         };
         r.readAsDataURL(foto);
       });
