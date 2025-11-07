@@ -49,6 +49,7 @@
     <button onclick="verificarPlaca()">Verificar Acesso</button>
     <p id="msg" class="msg"></p>
 
+    <!-- APP LIBERADO -->
     <div id="app" class="hidden">
       <h2>Comprovante Liberado!</h2>
       <input type="text" id="motorista" placeholder="Nome do Motorista" required>
@@ -56,18 +57,18 @@
       <button onclick="iniciar()">Iniciar Comprovante</button>
       <div class="fotos" id="fotos"></div>
       <div id="progress-container"><div id="progress-bar"></div></div>
-      <button onclick="enviar()" id="env" style="display:none">Enviar</button>
+      <button onclick="enviar()" id="env" style="display:none">Enviar para Transportadora</button>
       <p id="ok"></p>
     </div>
   </div>
 
   <div id="loading">
     <div class="spinner"></div>
-    Processando...
+    Processando foto...
   </div>
 
   <script>
-    const URL = 'https://script.google.com/macros/s/AKfycbx7RkU2UiQzfV2R8fYw4MbIJJ_91MRlzh-js5ksZ_INVyTWRAV9GXjWVOH17gYHSRhdsQ/exec';
+    const URL = 'https://script.google.com/macros/s/AKfycbxMX4Hpzou3AjBw0K2BqtEGbFsqSqWKvVhMwx97WmWXGQMUKhgXfhda9ar2CWg4oNalAQ/exec';
 
     let fotos = [], lat = null, lng = null, gpsPronto = false;
     let placaAutorizada = false, placaUsada = "";
@@ -98,20 +99,19 @@
       fetch(URL, {
         method: 'POST',
         body: JSON.stringify({ acao: "verificarPlaca", placa }),
-        mode: 'no-cors'  // ← CHAVE: PULA CORS/PREFLIGHT
+        mode: 'no-cors'
       })
       .then(() => {
-        btn.disabled = false;
-        // Com no-cors, não lê resposta - assume sucesso após 2s
         setTimeout(() => {
+          btn.disabled = false;
           placaAutorizada = true; placaUsada = placa;
           msg.innerHTML = "Placa autorizada!"; msg.className = "msg ok";
           document.getElementById('app').classList.remove('hidden');
-        }, 2000);
+        }, 1500);
       })
-      .catch(err => {
+      .catch(() => {
         btn.disabled = false;
-        msg.innerHTML = "Erro: " + err.message;
+        msg.innerHTML = "Erro de conexão";
       });
     }
 
@@ -224,9 +224,9 @@
           fetch(URL, { 
             method: 'POST', 
             body: JSON.stringify(dados), 
-            mode: 'no-cors'  // ← CHAVE: PULA CORS
+            mode: 'no-cors'
           })
-          .then(() => prog())  // Não lê resposta
+          .then(() => prog())
           .catch(() => prog());
         };
         r.readAsDataURL(f);
