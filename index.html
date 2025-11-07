@@ -49,7 +49,6 @@
     <button onclick="verificarPlaca()">Verificar Acesso</button>
     <p id="msg" class="msg"></p>
 
-    <!-- APP LIBERADO -->
     <div id="app" class="hidden">
       <h2>Comprovante Liberado!</h2>
       <input type="text" id="motorista" placeholder="Nome do Motorista" required>
@@ -57,139 +56,111 @@
       <button onclick="iniciar()">Iniciar Comprovante</button>
       <div class="fotos" id="fotos"></div>
       <div id="progress-container"><div id="progress-bar"></div></div>
-      <button onclick="enviar()" id="env" style="display:none">Enviar para Transportadora</button>
+      <button onclick="enviar()" id="env" style="display:none">Enviar</button>
       <p id="ok"></p>
     </div>
   </div>
 
   <div id="loading">
     <div class="spinner"></div>
-    Processando foto...
+    Processando...
   </div>
 
   <script>
-    // URL DO SEU WEB APP (ATUALIZADA!)
     const URL = 'https://script.google.com/macros/s/AKfycbx7RkU2UiQzfV2R8fYw4MbIJJ_91MRlzh-js5ksZ_INVyTWRAV9GXjWVOH17gYHSRhdsQ/exec';
 
     let fotos = [], lat = null, lng = null, gpsPronto = false;
-    let placaAutorizada = false;
-    let placaUsada = "";
+    let placaAutorizada = false, placaUsada = "";
 
-    // Validação de placa
-    document.getElementById('placa').addEventListener('input', function(e) {
+    document.getElementById('placa').addEventListener('input', e => {
       let v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
       if (v.length > 7) v = v.slice(0,7);
       e.target.value = v;
     });
 
-    function validarPlaca(placa) {
-      const padrao1 = /^[A-Z]{3}\d[A-Z]\d{2}$/;
-      const padrao2 = /^[A-Z]{3}\d{4}$/;
-      return padrao1.test(placa) || padrao2.test(placa);
+    function validarPlaca(p) {
+      return /^[A-Z]{3}\d[A-Z]\d{2}$/.test(p) || /^[A-Z]{3}\d{4}$/.test(p);
     }
 
     function formatarDataHora() {
-      const agora = new Date();
-      const dia = String(agora.getDate()).padStart(2, '0');
-      const mes = String(agora.getMonth() + 1).padStart(2, '0');
-      const ano = agora.getFullYear();
-      const hora = String(agora.getHours()).padStart(2, '0');
-      const min = String(agora.getMinutes()).padStart(2, '0');
-      return `${dia}/${mes}/${ano} ${hora}:${min}`;
+      const d = new Date();
+      return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
     }
 
-    // === VERIFICA PLACA NA PLANILHA ===
     function verificarPlaca() {
       const placa = document.getElementById('placa').value.trim();
-      if (!placa) return alert("Digite a placa!");
-      if (!validarPlaca(placa)) return alert("Placa inválida!");
+      if (!placa || !validarPlaca(placa)) return alert("Placa inválida!");
 
       const msg = document.getElementById('msg');
-      msg.innerHTML = "Verificando na planilha...";
-      msg.className = "msg";
-      const btn = event.target;
-      btn.disabled = true;
-
-      const dados = { acao: "verificarPlaca", placa };
+      msg.innerHTML = "Verificando..."; msg.className = "msg";
+      const btn = event.target; btn.disabled = true;
 
       fetch(URL, {
         method: 'POST',
-        body: JSON.stringify(dados),
-        headers: { 'Content-Type': 'application/json' }
+        body: JSON.stringify({ acao: "verificarPlaca", placa }),
+        headers: { 'Content-Type': 'text/plain' }
       })
-      .then(r => r.json())
-      .then(data => {
-        btn.disabled = false;
-        if (data.status === "OK") {
-          placaAutorizada = true;
-          placaUsada = placa;
-          msg.innerHTML = "Placa autorizada! Preencha os dados.";
-          msg.className = "msg ok";
-          document.getElementById('app').classList.remove('hidden');
-        } else {
-          msg.innerHTML = data.message || "Placa não encontrada";
+      .then(r => r.text())
+      .then(text => {
+        try {
+          const data = JSON.parse(text);
+          btn.disabled = false;
+          if (data.status === "OK") {
+            placaAutorizada = true; placaUsada = placa;
+            msg.innerHTML = "Placa autorizada!"; msg.className = "msg ok";
+            document.getElementById('app').classList.remove('hidden');
+          } else {
+            msg.innerHTML = data.message || "Não encontrada";
+          }
+        } catch (e) {
+          btn.disabled = false;
+          msg.innerHTML = "Erro no servidor";
         }
       })
       .catch(err => {
         btn.disabled = false;
-        msg.innerHTML = "Erro de conexão: " + err.message;
+        msg.innerHTML = "Erro: " + err.message;
       });
     }
 
     function iniciar() {
-      if (!placaAutorizada) return alert("Verifique a placa primeiro!");
-      const motorista = document.getElementById('motorista').value.trim();
+      if (!placaAutorizada) return alert("Verifique a placa!");
+      const m = document.getElementById('motorista').value.trim();
       const n = document.getElementById('nota').value.trim();
-      if (!motorista || !n) return alert("Preencha todos os campos!");
+      if (!m || !n) return alert("Preencha todos os campos!");
 
       if (!gpsPronto) {
-        if (!navigator.geolocation) return alert("GPS não disponível");
-        navigator.geolocation.getCurrentPosition(pos => {
-          lat = pos.coords.latitude.toFixed(6);
-          lng = pos.coords.longitude.toFixed(6);
+        navigator.geolocation.getCurrentPosition(p => {
+          lat = p.coords.latitude.toFixed(6);
+          lng = p.coords.longitude.toFixed(6);
           gpsPronto = true;
           tirarFoto();
         }, () => alert("Permita o GPS!"));
-      } else {
-        tirarFoto();
-      }
+      } else tirarFoto();
     }
 
-    function adicionarMarcaDagua(file, callback) {
-      const reader = new FileReader();
-      reader.onload = ev => {
+    function adicionarMarcaDagua(file, cb) {
+      const r = new FileReader();
+      r.onload = e => {
         const img = new Image();
         img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          canvas.width = img.width;
-          canvas.height = img.height;
+          const c = document.createElement('canvas');
+          const ctx = c.getContext('2d');
+          c.width = img.width; c.height = img.height;
           ctx.drawImage(img, 0, 0);
-
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+          ctx.fillStyle = 'rgba(0,0,0,0.5)';
           ctx.fillRect(0, img.height - 110, img.width, 110);
-
-          ctx.font = 'bold 35px Arial';
-          ctx.fillStyle = '#00ff00';
-          ctx.textAlign = 'right';
+          ctx.font = 'bold 35px Arial'; ctx.fillStyle = '#0f0'; ctx.textAlign = 'right';
           ctx.fillText('ENTREGUE', img.width - 20, img.height - 70);
-
-          ctx.font = '22px Arial';
-          ctx.fillStyle = '#ffffff';
+          ctx.font = '22px Arial'; ctx.fillStyle = '#fff';
           ctx.fillText(formatarDataHora(), img.width - 20, img.height - 40);
-
-          ctx.font = '22px Arial';
-          ctx.fillStyle = '#ffff00';
+          ctx.fillStyle = '#ff0';
           ctx.fillText(`${lat}, ${lng}`, img.width - 20, img.height - 10);
-
-          canvas.toBlob(blob => {
-            const novoArquivo = new File([blob], file.name, { type: 'image/jpeg' });
-            callback(novoArquivo);
-          }, 'image/jpeg', 0.9);
+          c.toBlob(b => cb(new File([b], file.name, {type:'image/jpeg'})), 'image/jpeg', 0.9);
         };
-        img.src = ev.target.result;
+        img.src = e.target.result;
       };
-      reader.readAsDataURL(file);
+      r.readAsDataURL(file);
     }
 
     function tirarFoto() {
@@ -197,30 +168,18 @@
       const i = document.createElement('input');
       i.type = 'file'; i.accept = 'image/*'; i.capture = 'environment';
       i.onchange = e => {
-        const file = e.target.files[0];
-        if (!file) {
+        const f = e.target.files[0];
+        if (!f) { document.getElementById('loading').style.display = 'none'; return; }
+        adicionarMarcaDagua(f, nf => {
           document.getElementById('loading').style.display = 'none';
-          return;
-        }
-        adicionarMarcaDagua(file, arquivoComMarca => {
-          document.getElementById('loading').style.display = 'none';
-          const div = document.createElement('div');
-          div.className = 'foto-prev';
-          const img = document.createElement('img');
-          img.src = URL.createObjectURL(arquivoComMarca);
-          img.style.width = '100%'; img.style.height = '100%'; img.style.objectFit = 'cover';
-          const remover = document.createElement('div');
-          remover.textContent = 'X';
-          remover.className = 'remover';
-          remover.onclick = () => {
-            fotos = fotos.filter(f => f !== arquivoComMarca);
-            div.remove();
-            atualizarBotao();
-          };
-          div.appendChild(img);
-          div.appendChild(remover);
-          document.getElementById('fotos').appendChild(div);
-          fotos.push(arquivoComMarca);
+          const d = document.createElement('div'); d.className = 'foto-prev';
+          const img = document.createElement('img'); img.src = URL.createObjectURL(nf);
+          img.style.width = img.style.height = '100%'; img.style.objectFit = 'cover';
+          const x = document.createElement('div'); x.textContent = 'X'; x.className = 'remover';
+          x.onclick = () => { fotos = fotos.filter(ff => ff !== nf); d.remove(); atualizarBotao(); };
+          d.appendChild(img); d.appendChild(x);
+          document.getElementById('fotos').appendChild(d);
+          fotos.push(nf);
           mostrarAdicionarMais();
         });
       };
@@ -228,15 +187,12 @@
     }
 
     function mostrarAdicionarMais() {
-      const existente = document.querySelector('.camera-actions');
-      if (existente) existente.remove();
-      const actions = document.createElement('div');
-      actions.className = 'camera-actions';
-      const btnMais = document.createElement('button');
-      btnMais.textContent = 'Adicionar Mais';
-      btnMais.onclick = tirarFoto;
-      actions.appendChild(btnMais);
-      document.getElementById('fotos').appendChild(actions);
+      const ex = document.querySelector('.camera-actions');
+      if (ex) ex.remove();
+      const a = document.createElement('div'); a.className = 'camera-actions';
+      const b = document.createElement('button'); b.textContent = 'Adicionar Mais'; b.onclick = tirarFoto;
+      a.appendChild(b);
+      document.getElementById('fotos').appendChild(a);
       atualizarBotao();
     }
 
@@ -244,57 +200,36 @@
       document.getElementById('env').style.display = fotos.length > 0 ? 'block' : 'none';
     }
 
-    function enviar(){
+    function enviar() {
       if (!placaAutorizada) return alert("Placa não autorizada!");
-      const envBtn = document.getElementById('env');
-      envBtn.disabled = true;
+      const btn = document.getElementById('env'); btn.disabled = true;
       document.getElementById('progress-container').style.display = 'block';
       document.getElementById('ok').innerHTML = "Enviando...";
-      let enviadas = 0;
-      const total = fotos.length;
+      let env = 0, total = fotos.length;
       const nota = document.getElementById('nota').value.trim();
       const motorista = document.getElementById('motorista').value.trim();
 
-      const atualizarProgresso = () => {
-        enviadas++;
-        document.getElementById('progress-bar').style.width = (enviadas/total*100) + '%';
-        if (enviadas === total) sucesso();
+      const prog = () => {
+        env++;
+        document.getElementById('progress-bar').style.width = (env/total*100)+'%';
+        if (env === total) sucesso();
       };
 
-      fotos.forEach((foto, i) => {
+      fotos.forEach((f, i) => {
         const r = new FileReader();
         r.onload = () => {
           const b = r.result.split(',')[1];
-          const dados = {
-            acao: "enviarFoto",
-            nota: nota,
-            placa: placaUsada,
-            motorista: motorista,
-            lat: lat,
-            lng: lng,
-            nome: `${nota}_${i+1}_${placaUsada}.jpg`,
-            file: b
-          };
-          fetch(URL, {
-            method: 'POST',
-            body: JSON.stringify(dados),
-            headers: { 'Content-Type': 'application/json' }
-          })
-          .then(r => r.json())
-          .then(data => {
-            if (data.status !== "OK") console.error("Erro no envio:", data.message);
-            atualizarProgresso();
-          })
-          .catch(err => {
-            console.error("Erro no fetch:", err);
-            atualizarProgresso();
-          });
+          const dados = { acao: "enviarFoto", nota, placa: placaUsada, motorista, lat, lng, nome: `${nota}_${i+1}_${placaUsada}.jpg`, file: b };
+          fetch(URL, { method: 'POST', body: JSON.stringify(dados), headers: { 'Content-Type': 'text/plain' } })
+          .then(r => r.text())
+          .then(t => { try { JSON.parse(t); } catch(e) {} prog(); })
+          .catch(() => prog());
         };
-        r.readAsDataURL(foto);
+        r.readAsDataURL(f);
       });
 
       function sucesso() {
-        document.getElementById('ok').innerHTML="Tudo enviado! Abrindo WhatsApp...";
+        document.getElementById('ok').innerHTML = "Enviado! Abrindo WhatsApp...";
         const msg = `Entrega ${nota} com ${total} foto(s)!\nMotorista: ${motorista}\nPlaca: ${placaUsada}\nLocal: https://maps.google.com/?q=${lat},${lng}`;
         window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
         setTimeout(() => location.reload(), 3000);
