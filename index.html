@@ -17,8 +17,12 @@
     #progress-bar{height:100%;width:0;background:#007bff;transition:width 0.3s}
     #ok{margin-top:15px;font-weight:bold;color:green}
     h2{color:#007bff}
+    h3{color:#007bff;font-size:20px}
     .camera-actions{width:90%;margin:10px auto 0;display:flex;justify-content:center;gap:10px}
     .camera-actions button{width:100%;padding:14px;font-size:16px;margin:0}
+    .erro{color:#dc3545}
+    .sucesso{color:#28a745}
+    #placa-verificacao{margin-bottom:10px}
 
     /* FOTO DE EXEMPLO */
     .obs p{font-size:14px;line-height:1.5;margin:10px 0}
@@ -36,23 +40,33 @@
     <img src="logo.png" alt="Extra Transportes" class="logo" onerror="this.style.display='none'">
     <h2>Comprovante de Entrega</h2>
 
-    <div class="obs">
-      <p>⚠️ Fotos devem ser nítidas e bem iluminadas.<br>
-      ⚠️ Fotos não Legíveis serão solicitadas novamente.<br>
-      ⚠️ O site pedirá permissões — clique em "Permitir" para continuar.</p>
-      <div class="exemplo-container">
-        <img src="exemplo.jpg" alt="Foto de exemplo" class="exemplo-img" onerror="this.style.display='none'">
-      </div>
+    <div id="tela-verificacao">
+      <h3>Verificação de Acesso</h3>
+      <p style="font-size:14px;color:#666;margin:15px 0">Insira a placa do veículo para verificar autorização:</p>
+      <input type="text" id="placa-verificacao" placeholder="Placa (ex: ABC1D23)" maxlength="7" required>
+      <button onclick="verificarPlaca()">Verificar Placa</button>
+      <p id="mensagem-verificacao" style="margin-top:15px;font-weight:bold"></p>
     </div>
 
-    <input type="text" id="motorista" placeholder="Nome do Motorista" required>
-    <input type="text" id="nota" placeholder="Número da Nota/CT-e" required>
-    <input type="text" id="placa" placeholder="Placa (ex: ABC1D23)" maxlength="7" required>
-    <button onclick="iniciar()">Iniciar Comprovante</button>
-    <div class="fotos" id="fotos"></div>
-    <div id="progress-container"><div id="progress-bar"></div></div>
-    <button onclick="enviar()" id="env" style="display:none">Enviar para Transportadora</button>
-    <p id="ok"></p>
+    <div id="tela-formulario" style="display:none">
+      <div class="obs">
+        <p>⚠️ Fotos devem ser nítidas e bem iluminadas.<br>
+        ⚠️ Fotos não Legíveis serão solicitadas novamente.<br>
+        ⚠️ O site pedirá permissões — clique em "Permitir" para continuar.</p>
+        <div class="exemplo-container">
+          <img src="exemplo.jpg" alt="Foto de exemplo" class="exemplo-img" onerror="this.style.display='none'">
+        </div>
+      </div>
+
+      <input type="text" id="motorista" placeholder="Nome do Motorista" required>
+      <input type="text" id="nota" placeholder="Número da Nota/CT-e" required>
+      <input type="text" id="placa" placeholder="Placa" readonly required>
+      <button onclick="iniciar()">Iniciar Comprovante</button>
+      <div class="fotos" id="fotos"></div>
+      <div id="progress-container"><div id="progress-bar"></div></div>
+      <button onclick="enviar()" id="env" style="display:none">Enviar para Transportadora</button>
+      <p id="ok"></p>
+    </div>
   </div>
 
   <div id="loading">
@@ -61,13 +75,64 @@
   </div>
 
   <script>
-    let fotos = [], lat = null, lng = null, gpsPronto = false;
+    let fotos = [], lat = null, lng = null, gpsPronto = false, placaVerificada = false;
+    let placasAutorizadas = [];
 
-    document.getElementById('placa').addEventListener('input', function(e) {
+    const SCRIPT_VERIFICACAO = 'https://script.google.com/macros/s/AKfycbyDI1t7cpAO2iqLJt6WFraA0W42E92-D6l6ZGrLR5U3Y7Av0tXJ-tOacOFwQTpk2lbT7w/exec';
+
+    document.getElementById('placa-verificacao').addEventListener('input', function(e) {
       let v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
       if (v.length > 7) v = v.slice(0,7);
       e.target.value = v;
     });
+
+    async function carregarPlacasAutorizadas() {
+      try {
+        const response = await fetch(SCRIPT_VERIFICACAO);
+        const data = await response.json();
+        if (data.placas) {
+          placasAutorizadas = data.placas;
+        }
+      } catch (error) {
+        console.error('Erro ao carregar placas:', error);
+      }
+    }
+
+    function verificarPlaca() {
+      const placaInput = document.getElementById('placa-verificacao').value.trim();
+      const mensagem = document.getElementById('mensagem-verificacao');
+
+      if (!placaInput) {
+        mensagem.textContent = '';
+        return;
+      }
+
+      if (!validarPlaca(placaInput)) {
+        mensagem.textContent = 'Placa inválida! Use ABC1D23 ou ABC1234';
+        mensagem.className = 'erro';
+        placaVerificada = false;
+        return;
+      }
+
+      if (placasAutorizadas.includes(placaInput)) {
+        mensagem.textContent = 'Placa autorizada! Clique em "Continuar" para prosseguir.';
+        mensagem.className = 'sucesso';
+        placaVerificada = true;
+        mostrarTelaFormulario(placaInput);
+      } else {
+        mensagem.textContent = 'Placa não autorizada. Acesso bloqueado.';
+        mensagem.className = 'erro';
+        placaVerificada = false;
+      }
+    }
+
+    function mostrarTelaFormulario(placa) {
+      document.getElementById('tela-verificacao').style.display = 'none';
+      document.getElementById('tela-formulario').style.display = 'block';
+      document.getElementById('placa').value = placa;
+    }
+
+    carregarPlacasAutorizadas();
 
     function validarPlaca(placa) {
       const padrao1 = /^[A-Z]{3}\d[A-Z]\d{2}$/;
