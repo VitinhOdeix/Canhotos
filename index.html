@@ -9,8 +9,8 @@
     .c{background:#fff;max-width:420px;margin:auto;padding:30px;border-radius:25px;box-shadow:0 15px 40px rgba(0,0,0,.2);overflow:hidden}
     .logo{width:280px;margin:20px auto;display:block}
     input,button{width:90%;padding:16px;margin:12px auto;display:block;border-radius:12px;border:2px solid #007bff;font-size:18px;box-sizing:border-box}
-    button{background:#007bff;color:#fff;font-weight:bold;cursor:not-allowed;opacity:0.6}
-    button:not([disabled]){cursor:pointer;opacity:1}
+    button{background:#007bff;color:#fff;font-weight:bold;opacity:1;transition:opacity .2s}
+    button:disabled{background:#aaa;opacity:0.5;cursor:not-allowed !important}
     .fotos{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:15px 0}
     .foto-prev{width:100px;height:100px;object-fit:cover;border-radius:10px;border:2px solid #007bff;position:relative}
     .remover{position:absolute;top:5px;right:5px;background:red;color:white;border-radius:50%;width:20px;height:20px;font-size:12px;line-height:20px;cursor:pointer}
@@ -28,9 +28,13 @@
     #loading{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,123,255,0.9);color:white;padding:20px;border-radius:10px;font-size:16px;z-index:9999;text-align:center}
     .spinner{border:3px solid rgba(255,255,255,0.3);border-top:3px solid white;border-radius:50%;width:20px;height:20px;animation:spin 1s linear infinite;margin:0 auto 10px}
     @keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+
+    /* Overlay para bloquear cliques */
+    #blocker{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.3);z-index:9998;cursor:not-allowed}
   </style>
 </head>
 <body>
+  <div id="blocker"></div>
   <div class="c">
     <img src="logo.png" alt="Extra Transportes" class="logo" onerror="this.style.display='none'">
     <h2>Comprovante de Entrega</h2>
@@ -60,8 +64,10 @@
   </div>
 
   <script>
+    // === VARIÁVEIS GLOBAIS ===
     let fotos = [], lat = null, lng = null, gpsPronto = false;
     let placaValida = false;
+    let processando = false; // FLAG DE BLOQUEIO
 
     const inputPlaca = document.getElementById('placa');
     const inputMotorista = document.getElementById('motorista');
@@ -70,26 +76,30 @@
     const containerFotos = document.getElementById('fotos');
     const btnEnviar = document.getElementById('env');
     const okMsg = document.getElementById('ok');
+    const blocker = document.getElementById('blocker');
 
     const URL_VERIFICACAO_PLACAS = 'https://script.google.com/macros/s/AKfycbwx02Qirtq2QNhzvR1ACqF4W_ZmBHcS3NgVvVDe1MEg2HnHtNJxWdvpWfP-mSyASuGimw/exec';
     const URL_SALVAR_ENTREGA = 'https://script.google.com/macros/s/AKfycbwXF_DHm3SIbHQEtkaaqtbF94bHxRSgwSDNhH4_VYuDQ-4TBOd17zoSMCUnxkOYoRDvVg/exec';
 
-    // === BLOQUEIO VISUAL E FUNCIONAL ===
-    function desabilitarTodosBotoes() {
-      document.querySelectorAll('button').forEach(b => {
-        b.disabled = true;
-        b.style.opacity = '0.6';
-        b.style.cursor = 'not-allowed';
-      });
+    // === BLOQUEIO TOTAL ===
+    function bloquearTudo(mostrarLoading = false) {
+      processando = true;
+      document.querySelectorAll('button, input').forEach(el => el.disabled = true);
+      blocker.style.display = 'block';
+      if (mostrarLoading) document.getElementById('loading').style.display = 'block';
     }
 
-    function habilitarBotoesValidos() {
-      btnIniciar.disabled = !placaValida || fotos.length > 0;
-      btnEnviar.disabled = fotos.length === 0;
-      document.querySelectorAll('button:not([disabled])').forEach(b => {
-        b.style.opacity = '1';
-        b.style.cursor = 'pointer';
+    function desbloquearTudo() {
+      processando = false;
+      document.querySelectorAll('button, input').forEach(el => {
+        if (el.id === 'motorista' || el.id === 'nota') el.disabled = !placaValida;
+        else if (el.id === 'btnIniciar') el.disabled = !placaValida;
+        else if (el.id === 'env') el.disabled = fotos.length === 0;
+        else el.disabled = false;
       });
+      blocker.style.display = 'none';
+      document.getElementById('loading').style.display = 'none';
+      atualizarBotao();
     }
 
     function bloquearFormulario() {
@@ -98,7 +108,7 @@
       btnIniciar.style.display = 'none';
       containerFotos.style.display = 'none';
       btnEnviar.style.display = 'none';
-      desabilitarTodosBotoes();
+      desbloquearTudo();
     }
 
     function liberarFormulario() {
@@ -107,17 +117,18 @@
       btnIniciar.style.display = 'block';
       containerFotos.style.display = 'block';
       okMsg.innerHTML = '<span style="color:green">Placa válida! Preencha os dados.</span>';
-      habilitarBotoesValidos();
+      desbloquearTudo();
     }
 
     bloquearFormulario();
 
+    // === VALIDAÇÃO DE PLACA ===
     inputPlaca.addEventListener('input', function(e) {
-      let v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-      if (v.length > 7) v = v.slice(0,7);
+      let v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0,7);
       e.target.value = v;
 
-      if (v.length === 7 && validarPlaca(v)) {
+      if (v.length === 7 && /^[A-Z]{3}\d[A-Z0-9]\d{2}$/.test(v)) {
+        bloquearTudo();
         verificarPlacaNoGoogleSheets(v);
       } else {
         bloquearFormulario();
@@ -126,27 +137,21 @@
       }
     });
 
-    function validarPlaca(placa) {
-      return /^[A-Z]{3}\d[A-Z0-9]\d{2}$/.test(placa);
-    }
-
     function verificarPlacaNoGoogleSheets(placa) {
       okMsg.innerHTML = '<span style="color:#007bff">Verificando placa...</span>';
-      desabilitarTodosBotoes();
       
       fetch(URL_VERIFICACAO_PLACAS)
-        .then(res => res.json())
+        .then(r => r.json())
         .then(data => {
-          if (data.error || !data.placas?.includes(placa)) {
-            okMsg.innerHTML = '<span style="color:red">Placa não autorizada!</span>';
-            bloquearFormulario();
-            return;
+          if (data.placas?.includes(placa)) {
+            placaValida = true;
+            liberarFormulario();
+          } else {
+            throw new Error("Placa não autorizada");
           }
-          placaValida = true;
-          liberarFormulario();
         })
         .catch(() => {
-          okMsg.innerHTML = '<span style="color:red">Erro de conexão.</span>';
+          okMsg.innerHTML = '<span style="color:red">Erro. Tente novamente.</span>';
           bloquearFormulario();
         });
     }
@@ -156,50 +161,57 @@
       return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
     }
 
+    // === INICIAR ===
     function iniciar() {
-      desabilitarTodosBotoes();
-      if (!placaValida || !inputMotorista.value.trim() || !inputNota.value.trim()) {
-        habilitarBotoesValidos();
+      if (processando) return;
+      bloquearTudo();
+
+      const motorista = inputMotorista.value.trim();
+      const nota = inputNota.value.trim();
+
+      if (!placaValida || !motorista || !nota) {
+        desbloquearTudo();
         return alert("Preencha todos os campos!");
       }
 
       if (!gpsPronto) {
-        if (!navigator.geolocation) return alert("GPS não disponível");
+        if (!navigator.geolocation) {
+          desbloquearTudo();
+          return alert("GPS não disponível");
+        }
         navigator.geolocation.getCurrentPosition(pos => {
           lat = pos.coords.latitude.toFixed(6);
           lng = pos.coords.longitude.toFixed(6);
           gpsPronto = true;
           tirarFoto();
         }, () => {
+          desbloquearTudo();
           alert("Permita o GPS!");
-          habilitarBotoesValidos();
         });
       } else {
         tirarFoto();
       }
     }
 
+    // === TIRAR FOTO ===
     function tirarFoto() {
-      desabilitarTodosBotoes();
-      document.getElementById('loading').style.display = 'block';
+      bloquearTudo(true);
 
       const i = document.createElement('input');
       i.type = 'file'; i.accept = 'image/*'; i.capture = 'environment';
       i.onchange = e => {
         const file = e.target.files[0];
         if (!file) {
-          document.getElementById('loading').style.display = 'none';
-          habilitarBotoesValidos();
+          desbloquearTudo();
           return;
         }
 
         adicionarMarcaDagua(file, arquivoComMarca => {
-          document.getElementById('loading').style.display = 'none';
           const div = document.createElement('div');
           div.className = 'foto-prev';
           const img = document.createElement('img');
           img.src = URL.createObjectURL(arquivoComMarca);
-          img.style.width = '100%'; img.style.height = '100%'; img.style.objectFit = 'cover';
+          img.style.cssText = 'width:100%;height:100%;object-fit:cover';
           const remover = document.createElement('div');
           remover.textContent = '×';
           remover.className = 'remover';
@@ -213,7 +225,7 @@
           document.getElementById('fotos').appendChild(div);
           fotos.push(arquivoComMarca);
           mostrarAdicionarMais();
-          habilitarBotoesValidos();
+          desbloquearTudo();
         });
       };
       i.click();
@@ -234,30 +246,32 @@
 
     function atualizarBotao() {
       btnEnviar.style.display = fotos.length > 0 ? 'block' : 'none';
-      habilitarBotoesValidos();
+      desbloquearTudo();
     }
 
-    // === ENVIO CORRIGIDO: nota e placa no escopo ===
+    // === ENVIO CORRIGIDO 100% ===
     function enviar() {
+      if (processando || fotos.length === 0) return;
+      bloquearTudo();
+
       const nota = inputNota.value.trim();
       const placa = inputPlaca.value.trim();
       const motorista = inputMotorista.value.trim();
 
-      desabilitarTodosBotoes();
       document.getElementById('progress-container').style.display = 'block';
       okMsg.innerHTML = "Enviando...";
       let enviadas = 0;
       const total = fotos.length;
       let erro = false;
 
-      const atualizarProgresso = () => {
+      const atualizar = () => {
         enviadas++;
         document.getElementById('progress-bar').style.width = (enviadas/total*100) + '%';
         if (enviadas === total) {
           if (erro) {
             okMsg.innerHTML = "<span style='color:red'>Erro ao enviar. Tente novamente.</span>";
             document.getElementById('progress-container').style.display = 'none';
-            habilitarBotoesValidos();
+            desbloquearTudo();
           } else {
             okMsg.innerHTML = "Tudo enviado! Abrindo WhatsApp...";
             const msg = `Entrega ${nota} com ${total} foto(s)!\nMotorista: ${motorista}\nPlaca: ${placa}\nLocal: https://maps.google.com/?q=${lat},${lng}`;
@@ -270,7 +284,6 @@
       fotos.forEach((foto, i) => {
         const r = new FileReader();
         r.onload = () => {
-          const b = r.result.split(',')[1];
           const dados = {
             nota: nota,
             placa: placa,
@@ -278,7 +291,7 @@
             lat: lat,
             lng: lng,
             nome: `${nota}_${i+1}_${placa}.jpg`,
-            file: b
+            file: r.result.split(',')[1]
           };
 
           fetch(URL_SALVAR_ENTREGA, {
@@ -286,10 +299,38 @@
             body: JSON.stringify(dados),
             headers: {'Content-Type': 'text/plain'},
             mode: 'no-cors'
-          }).catch(() => erro = true).finally(atualizarProgresso);
+          }).catch(() => erro = true).finally(atualizar);
         };
         r.readAsDataURL(foto);
       });
+    }
+
+    function adicionarMarcaDagua(file, callback) {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          ctx.drawImage(img, 0, 0);
+          ctx.fillStyle = 'rgba(0,0,0,0.5)';
+          ctx.fillRect(0, img.height - 110, img.width, 110);
+          ctx.font = 'bold 35px Arial';
+          ctx.fillStyle = '#00ff00';
+          ctx.textAlign = 'right';
+          ctx.fillText('ENTREGUE', img.width - 20, img.height - 70);
+          ctx.font = '22px Arial';
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(formatarDataHora(), img.width - 20, img.height - 40);
+          ctx.fillStyle = '#ffff00';
+          ctx.fillText(`${lat}, ${lng}`, img.width - 20, img.height - 10);
+          canvas.toBlob(blob => callback(new File([blob], file.name, {type: 'image/jpeg'})), 'image/jpeg', 0.9);
+        };
+        img.src = ev.target.result;
+      };
+      reader.readAsDataURL(file);
     }
   </script>
 </body>
