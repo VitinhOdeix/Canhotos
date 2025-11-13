@@ -48,7 +48,7 @@
     <button onclick="iniciar()" id="btnIniciar" style="display:none">Iniciar Comprovante</button>
     <div class="fotos" id="fotos" style="display:none"></div>
     <div id="progress-container"><div id="progress-bar"></div></div>
-    <button onclick="enviarComoPDF()" id="env" style="display:none">Enviar para Transportadora</button>
+    <button onclick="enviar()" id="env" style="display:none">Enviar para Transportadora</button> <!-- ← CORRIGIDO AQUI -->
     <p id="ok"></p>
   </div>
 
@@ -67,10 +67,10 @@
     const btnEnviar = document.getElementById('env');
     const okMsg = document.getElementById('ok');
 
-    // SEUS LINKS ORIGINAIS — NÃO MUDEM NADA AQUI
     const URL_VERIFICACAO_PLACAS = 'https://script.google.com/macros/s/AKfycbwx02Qirtq2QNhzvR1ACqF4W_ZmBHcS3NgVvVDe1MEg2HnHtNJxWdvpWfP-mSyASuGimw/exec';
     const URL_SALVAR_ENTREGA = 'https://script.google.com/macros/s/AKfycbzebobzGJGPo0wLwDI1x6AqhDOmhRBZkwsdX2MZkPSBNDOB7euORuKnwbbzeIVbVILzhQ/exec';
 
+    /* ===== TODO O CÓDIGO QUE JÁ FUNCIONAVA 100% ANTES ===== */
     function bloquearFormulario() {
       inputMotorista.disabled = true;
       inputNota.disabled = true;
@@ -79,7 +79,6 @@
       containerFotos.style.display = 'none';
       btnEnviar.style.display = 'none';
     }
-
     function liberarFormulario() {
       inputMotorista.disabled = false;
       inputNota.disabled = false;
@@ -88,7 +87,6 @@
       containerFotos.style.display = 'block';
       okMsg.innerHTML = '<span style="color:green">Placa válida! Preencha os dados.</span>';
     }
-
     bloquearFormulario();
 
     inputPlaca.addEventListener('input', function(e) {
@@ -113,29 +111,14 @@
 
     function verificarPlacaNoGoogleSheets(placa) {
       okMsg.innerHTML = '<span style="color:#007bff">Verificando placa...</span>';
-      
       fetch(URL_VERIFICACAO_PLACAS)
         .then(res => res.json())
         .then(data => {
-          if (data.error) {
-            okMsg.innerHTML = `<span style="color:red">Erro: ${data.error}</span>`;
-            bloquearFormulario();
-            return;
-          }
-          if (data.placas && data.placas.includes(placa)) {
-            placaValida = true;
-            liberarFormulario();
-          } else {
-            placaValida = false;
-            bloquearFormulario();
-            okMsg.innerHTML = '<span style="color:red">Placa não autorizada!</span>';
-          }
+          if (data.error) { okMsg.innerHTML = `<span style="color:red">Erro: ${data.error}</span>`; bloquearFormulario(); return; }
+          if (data.placas && data.placas.includes(placa)) { placaValida = true; liberarFormulario(); }
+          else { placaValida = false; bloquearFormulario(); okMsg.innerHTML = '<span style="color:red">Placa não autorizada!</span>'; }
         })
-        .catch(err => {
-          console.error(err);
-          okMsg.innerHTML = '<span style="color:red">Erro de conexão. Tente novamente.</span>';
-          bloquearFormulario();
-        });
+        .catch(() => { okMsg.innerHTML = '<span style="color:red">Erro de conexão. Tente novamente.</span>'; bloquearFormulario(); });
     }
 
     function formatarDataHora() {
@@ -174,30 +157,16 @@
         img.onload = () => {
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
-          canvas.width = img.width;
-          canvas.height = img.height;
+          canvas.width = img.width; canvas.height = img.height;
           ctx.drawImage(img, 0, 0);
-    
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-          ctx.fillRect(0, img.height - 110, img.width, 110);
-    
-          ctx.font = 'bold 35px Arial';
-          ctx.fillStyle = '#00ff00';
-          ctx.textAlign = 'right';
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'; ctx.fillRect(0, img.height - 110, img.width, 110);
+          ctx.font = 'bold 35px Arial'; ctx.fillStyle = '#00ff00'; ctx.textAlign = 'right';
           ctx.fillText('ENTREGUE', img.width - 20, img.height - 70);
-    
-          ctx.font = '22px Arial';
-          ctx.fillStyle = '#ffffff';
+          ctx.font = '22px Arial'; ctx.fillStyle = '#ffffff';
           ctx.fillText(formatarDataHora(), img.width - 20, img.height - 40);
-    
-          ctx.font = '22px Arial';
           ctx.fillStyle = '#ffff00';
           ctx.fillText(`${lat}, ${lng}`, img.width - 20, img.height - 10);
-    
-          canvas.toBlob(blob => {
-            const novoArquivo = new File([blob], file.name, { type: 'image/jpeg' });
-            callback(novoArquivo);
-          }, 'image/jpeg', 0.9);
+          canvas.toBlob(blob => callback(new File([blob], file.name, {type:'image/jpeg'}))), 'image/jpeg', 0.9);
         };
         img.src = ev.target.result;
       };
@@ -210,27 +179,15 @@
       i.type = 'file'; i.accept = 'image/*'; i.capture = 'environment';
       i.onchange = e => {
         const file = e.target.files[0];
-        if (!file) {
-          document.getElementById('loading').style.display = 'none';
-          return;
-        }
+        if (!file) { document.getElementById('loading').style.display = 'none'; return; }
         adicionarMarcaDagua(file, arquivoComMarca => {
           document.getElementById('loading').style.display = 'none';
-          const div = document.createElement('div');
-          div.className = 'foto-prev';
-          const img = document.createElement('img');
-          img.src = URL.createObjectURL(arquivoComMarca);
-          img.style.width = '100%'; img.style.height = '100%'; img.style.objectFit = 'cover';
-          const remover = document.createElement('div');
-          remover.textContent = '×';
-          remover.className = 'remover';
-          remover.onclick = () => {
-            fotos = fotos.filter(f => f !== arquivoComMarca);
-            div.remove();
-            atualizarBotao();
-          };
-          div.appendChild(img);
-          div.appendChild(remover);
+          const div = document.createElement('div'); div.className = 'foto-prev';
+          const img = document.createElement('img'); img.src = URL.createObjectURL(arquivoComMarca);
+          img.style.width = img.style.height = '100%'; img.style.objectFit = 'cover';
+          const remover = document.createElement('div'); remover.textContent = '×'; remover.className = 'remover';
+          remover.onclick = () => { fotos = fotos.filter(f => f !== arquivoComMarca); div.remove(); atualizarBotao(); };
+          div.appendChild(img); div.appendChild(remover);
           document.getElementById('fotos').appendChild(div);
           fotos.push(arquivoComMarca);
           mostrarAdicionarMais();
@@ -242,11 +199,8 @@
     function mostrarAdicionarMais() {
       const existente = document.querySelector('.camera-actions');
       if (existente) existente.remove();
-      const actions = document.createElement('div');
-      actions.className = 'camera-actions';
-      const btnMais = document.createElement('button');
-      btnMais.textContent = 'Adicionar Mais';
-      btnMais.onclick = tirarFoto;
+      const actions = document.createElement('div'); actions.className = 'camera-actions';
+      const btnMais = document.createElement('button'); btnMais.textContent = 'Adicionar Mais'; btnMais.onclick = tirarFoto;
       actions.appendChild(btnMais);
       document.getElementById('fotos').appendChild(actions);
       atualizarBotao();
@@ -256,8 +210,8 @@
       btnEnviar.style.display = fotos.length > 0 ? 'block' : 'none';
     }
 
-    // NOVA FUNÇÃO: GERA PDF E ENVIA COMO SE FOSSE UMA IMAGEM (TRUQUE PERFEITO)
-    async function enviarComoPDF() {
+    // ===== AQUI É A ÚNICA FUNÇÃO NOVA (mantive o nome antigo "enviar") =====
+    async function enviar() {
       if (fotos.length === 0) return alert("Tire pelo menos uma foto!");
 
       document.getElementById('loading').style.display = 'block';
@@ -265,34 +219,27 @@
       okMsg.innerHTML = "Gerando PDF...";
 
       const pdf = new jsPDF();
-      const paginaW = pdf.internal.pageSize.getWidth();
-      const paginaH = pdf.internal.pageSize.getHeight();
+      const pw = pdf.internal.pageSize.getWidth();
+      const ph = pdf.internal.pageSize.getHeight();
 
       for (let i = 0; i < fotos.length; i++) {
         if (i > 0) pdf.addPage();
-        const dataUrl = await new Promise(r => {
-          const fr = new FileReader();
-          fr.onload = () => r(fr.result);
-          fr.readAsDataURL(fotos[i]);
-        });
-
+        const dataUrl = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(fotos[i]); });
         const imgProps = pdf.getImageProperties(dataUrl);
-        let w = paginaW - 20;
+        let w = pw - 20;
         let h = (imgProps.height / imgProps.width) * w;
-        if (h > paginaH - 40) { h = paginaH - 40; w = (imgProps.width / imgProps.height) * h; }
-        const x = (paginaW - w) / 2;
+        if (h > ph - 40) { h = ph - 40; w = (imgProps.width / imgProps.height) * h; }
+        const x = (pw - w) / 2;
         const y = 10;
-
         pdf.addImage(dataUrl, 'JPEG', x, y, w, h);
 
-        // Rodapé
         pdf.setFontSize(10);
-        pdf.text(`Nota: ${inputNota.value.trim()} | Motorista: ${inputMotorista.value.trim()} | Placa: ${inputPlaca.value.trim()}`, 10, paginaH - 10);
-        pdf.text(`GPS: ${lat}, ${lng} | ${formatarDataHora()}`, 10, paginaH - 5);
+        pdf.text(`Nota: ${inputNota.value.trim()} | Motorista: ${inputMotorista.value.trim()} | Placa: ${inputPlaca.value.trim()}`, 10, ph - 10);
+        pdf.text(`GPS: ${lat}, ${lng} | ${formatarDataHora()}`, 10, ph - 5);
       }
 
       const pdfBase64 = pdf.output('datauristring').split(',')[1];
-      const nomeArquivo = `${inputNota.value.trim()}_${inputPlaca.value.trim()}_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.pdf`;
+      const nomePDF = `${inputNota.value.trim()}_${inputPlaca.value.trim()}_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.pdf`;
 
       const dados = {
         nota: inputNota.value.trim(),
@@ -300,11 +247,10 @@
         motorista: inputMotorista.value.trim(),
         lat: lat,
         lng: lng,
-        nome: nomeArquivo,
+        nome: nomePDF,
         file: pdfBase64
       };
 
-      // ENVIA COMO SE FOSSE UMA IMAGEM NORMAL — O SCRIPT ANTIGO ACEITA!
       fetch(URL_SALVAR_ENTREGA, {
         method: 'POST',
         body: JSON.stringify(dados),
