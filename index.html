@@ -55,10 +55,13 @@
 
   <div id="loading">
     <div class="spinner"></div>
-    Processando foto...
+    Processando...
   </div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script>
+    const { jsPDF } = window.jspdf;
+
     let fotos = [], lat = null, lng = null, gpsPronto = false;
     let placaValida = false;
 
@@ -70,9 +73,8 @@
     const btnEnviar = document.getElementById('env');
     const okMsg = document.getElementById('ok');
 
-    // SEU NOVO LINK (ATUALIZADO!)
-    const URL_VERIFICACAO_PLACAS = 'https://script.google.com/macros/s/AKfycbzJKN7oiZlS420kdsqpzT-hoTpvy9l0MWYLDu3dJOEMnheBzVEu_73mCNEFgUJfpzx0wA/exec';
-    const URL_SALVAR_ENTREGA = 'https://script.google.com/macros/s/AKfycbxuJPodVWP77XpPYRTRsIOiUV1y4ODzm_e3CwxSzO24OUEBVPrloaDynPFtDaqf3lPNSg/exec';
+    const URL_VERIFICACAO_PLACAS = 'https://script.google.com/macros/s/AKfycbwx02Qirtq2QNhzvR1ACqF4W_ZmBHcS3NgVvVDe1MEg2HnHtNJxWdvpWfP-mSyASuGimw/exec';
+    const URL_SALVAR_ENTREGA = 'https://script.google.com/macros/s/AKfycbw74mcsCiD4iq8kA7yJF4rpt0aO8Q9vhQwsyq-t4UH6mesrhecSboB9f4-8-6ktXUxlFw/exec';
 
     function bloquearFormulario() {
       inputMotorista.disabled = true;
@@ -259,36 +261,70 @@
       btnEnviar.style.display = fotos.length > 0 ? 'block' : 'none';
     }
 
-    function enviar(){
+    async function gerarPDFcomFotos() {
+      const pdf = new jsPDF();
+      const paginaAltura = pdf.internal.pageSize.getHeight();
+      const paginaLargura = pdf.internal.pageSize.getWidth();
+
+      for (let i = 0; i < fotos.length; i++) {
+        if (i > 0) pdf.addPage();
+        const imgData = await new Promise(resolve => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.readAsDataURL(fotos[i]);
+        });
+        const imgProps = pdf.getImageProperties(imgData);
+        const pdfWidthirebase = paginaLargura - 20;
+        const pdfHeight = (imgProps.height * pdfWidthirebase) / imgProps.width;
+        let heightLeft = pdfHeight;
+        let heightPos = 10;
+
+        while (heightLeft > 0) {
+          if (heightPos + heightLeft > paginaAltura - 10 && heightLeft < paginaAltura - 20) {
+            heightPos = 10;
+          }
+          if (heightPos > 10) pdf.addPage();
+          pdf.addImage(imgData, 'JPEG', 10, heightPos, pdfWidthirebase, Math.min(heightLeft, paginaAltura - heightPos - 10));
+          heightLeft -= (paginaAltura - heightPos - 10);
+          heightPos = 10;
+        }
+      }
+
+      return pdf.output('blob');
+    }
+
+    async function enviar(){
+      if (fotos.length === 0) return alert("Tire pelo menos uma foto!");
+
       const envBtn = document.getElementById('env');
       envBtn.disabled = true;
+      document.getElementById('loading').style.display = 'block';
       document.getElementById('progress-container').style.display = 'block';
-      okMsg.innerHTML = "Enviando...";
-      let enviadas = 0;
-      const total = fotos.length;
+      document.getElementById('progress-bar').style.width = '30%';
+      okMsg.innerHTML = "Gerando PDF...";
 
       const nota = inputNota.value.trim();
       const placa = inputPlaca.value.trim();
       const motorista = inputMotorista.value.trim();
+      const nomePDF = `${nota}_${placa}_ENTREGA.pdf`;
 
-      const atualizarProgresso = () => {
-        enviadas++;
-        document.getElementById('progress-bar').style.width = (enviadas/total*100) + '%';
-        if (enviadas === total) sucesso();
-      };
+      try {
+        const pdfBlob = await gerarPDFcomFotos();
+        document.getElementById('progress-bar').style.width = '70%';
+        okMsg.innerHTML = "Enviando PDF...";
 
-      fotos.forEach((foto, i) => {
-        const r = new FileReader();
-        r.onload = () => {
-          const b = r.result.split(',')[1];
+        const reader = new FileReader();
+        reader.onload = () => {
+          const base64 = reader.result.split(',')[1];
           const dados = {
             nota: nota,
             placa: placa,
             motorista: motorista,
             lat: lat,
             lng: lng,
-            nome: `${nota}_${i+1}_${placa}.jpg`,
-            file: b
+            nome: nomePDF,
+            file: base64,
+            isPDF: true
           };
 
           fetch(URL_SALVAR_ENTREGA, {
@@ -296,17 +332,25 @@
             body: JSON.stringify(dados),
             headers: {'Content-Type': 'text/plain'},
             mode: 'no-cors'
-          }).then(() => atualizarProgresso())
-            .catch(() => atualizarProgresso());
+          }).then(() => {
+            sucesso();
+          }).catch(() => {
+            sucesso(); // ainda chama sucesso porque no-cors não dá erro real
+          });
         };
-        r.readAsDataURL(foto);
-      });
+        reader.readAsDataURL(pdfBlob);
+      } catch (err) {
+        alert("Erro ao gerar PDF: " + err.message);
+        envBtn.disabled = false;
+        document.getElementById('loading').style.display = 'none';
+      }
 
       function sucesso() {
-        okMsg.innerHTML="Tudo enviado! Abrindo WhatsApp...";
-        const msg = `Entrega ${nota} com ${total} foto(s)!\nMotorista: ${motorista}\nPlaca: ${placa}\nLocal: https://maps.google.com/?q=${lat},${lng}`;
+        document.getElementById('progress-bar').style.width = '100%';
+        okMsg.innerHTML="PDF enviado com sucesso! Abrindo WhatsApp...";
+        const msg = `Entrega ${nota} realizada!\nPDF com ${fotos.length} foto(s) enviado.\nMotorista: ${motorista}\nPlaca: ${placa}\nLocal: https://maps.google.com/?q=${lat},${lng}`;
         window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
-        setTimeout(() => location.reload(), 3000);
+        setTimeout(() => location.reload(), 4000);
       }
     }
   </script>
