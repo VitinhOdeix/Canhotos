@@ -66,19 +66,12 @@
     const btnEnviar = document.getElementById('env');
     const okMsg = document.getElementById('ok');
 
-    // ATUALIZE ESTE LINK DEPOIS DE CRIAR A NOVA IMPLANTAÇÃO
+    // LINKS ORIGINAIS — NÃO MUDAM NADA AQUI
     const URL_VERIFICACAO_PLACAS = 'https://script.google.com/macros/s/AKfycbwx02Qirtq2QNhzvR1ACqF4W_ZmBHcS3NgVvVDe1MEg2HnHtNJxWdvpWfP-mSyASuGimw/exec';
-    const URL_SALVAR_PDF = 'https://script.google.com/macros/s/AKfycbyfazQSnUmRm2dN6fwPqK4EfR9vS6TAR1B3m-55WhpgTZXeo4CQx2L20rLQi4QKnCa6wA/exec';
+    const URL_SALVAR_ENTREGA = 'https://script.google.com/macros/s/AKfycbyb1wFayChvSqwp92E27cLfFboC8U0W8FEnrkZsZQm698x3icdDvIUEcHnBfca3Cuo3_g/exec';
 
-    function bloquearFormulario() {
-      inputMotorista.disabled = true; inputNota.disabled = true;
-      btnIniciar.style.display = 'none'; containerFotos.style.display = 'none'; btnEnviar.style.display = 'none';
-    }
-    function liberarFormulario() {
-      inputMotorista.disabled = false; inputNota.disabled = false;
-      btnIniciar.style.display = 'block'; containerFotos.style.display = 'block';
-      okMsg.innerHTML = '<span style="color:green">Placa válida! Preencha os dados.</span>';
-    }
+    function bloquearFormulario() { inputMotorista.disabled = inputNota.disabled = true; btnIniciar.style.display = containerFotos.style.display = btnEnviar.style.display = 'none'; }
+    function liberarFormulario() { inputMotorista.disabled = inputNota.disabled = false; btnIniciar.style.display = containerFotos.style.display = 'block'; okMsg.innerHTML = '<span style="color:green">Placa válida! Preencha os dados.</span>'; }
     bloquearFormulario();
 
     inputPlaca.addEventListener('input', function(e) {
@@ -105,9 +98,7 @@
       if (!placaValida) return alert("Placa não validada!");
       if (!inputMotorista.value.trim() || !inputNota.value.trim()) return alert("Preencha todos os campos!");
       if (!gpsPronto) {
-        navigator.geolocation.getCurrentPosition(p=>{
-          lat = p.coords.latitude.toFixed(6); lng = p.coords.longitude.toFixed(6); gpsPronto = true; tirarFoto();
-        }, ()=>alert("Permita o GPS!"));
+        navigator.geolocation.getCurrentPosition(p=>{ lat = p.coords.latitude.toFixed(6); lng = p.coords.longitude.toFixed(6); gpsPronto = true; tirarFoto(); }, ()=>alert("Permita o GPS!"));
       } else tirarFoto();
     }
 
@@ -120,8 +111,7 @@
           const ctx = c.getContext('2d');
           c.width = img.width; c.height = img.height;
           ctx.drawImage(img, 0, 0);
-          ctx.fillStyle = 'rgba(0,0,0,0.5)';
-          ctx.fillRect(0, img.height-110, img.width, 110);
+          ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, img.height-110, img.width, 110);
           ctx.font = 'bold 35px Arial'; ctx.fillStyle = '#00ff00'; ctx.textAlign = 'right';
           ctx.fillText('ENTREGUE', img.width-20, img.height-70);
           ctx.font = '22px Arial'; ctx.fillStyle = '#ffffff';
@@ -161,14 +151,14 @@
     function mostrarAdicionarMais() {
       document.querySelectorAll('.camera-actions').forEach(el=>el.remove());
       const div = document.createElement('div'); div.className = 'camera-actions';
-      const btn = document.createElement('button'); btn.textContent = 'Adicionar Mais';
-      btn.onclick = tirarFoto; div.appendChild(btn); containerFotos.appendChild(div);
+      const btn = document.createElement('button'); btn.textContent = 'Adicionar Mais'; btn.onclick = tirarFoto;
+      div.appendChild(btn); containerFotos.appendChild(div);
       atualizarBotao();
     }
 
     function atualizarBotao() { btnEnviar.style.display = fotos.length > 0 ? 'block' : 'none'; }
 
-    // ============ NOVA FUNÇÃO: GERA PDF E ENVIA ============
+    // FUNÇÃO NOVA: GERA PDF E ENVIA PARA O SCRIPT ANTIGO (QUE CONTINUA FUNCIONANDO)
     async function gerarESalvarPDF() {
       if (fotos.length === 0) return alert("Tire pelo menos uma foto!");
 
@@ -196,31 +186,36 @@
         pdf.text(`GPS: ${lat}, ${lng} | ${formatarDataHora()}`, 10, h - 8);
       }
 
-      const pdfBlob = pdf.output('blob');
+      const pdfBase64 = pdf.output('datauristring').split(',')[1];
       const nomePDF = `${inputNota.value.trim()}_${inputPlaca.value.trim()}_${new Date().toISOString().slice(0,16).replace(/[-T:]/g,'')}.pdf`;
 
-      const fd = new FormData();
-      fd.append('file', pdfBlob, nomePDF);
-      fd.append('nota', inputNota.value.trim());
-      fd.append('placa', inputPlaca.value.trim());
-      fd.append('motorista', inputMotorista.value.trim());
-      fd.append('lat', lat);
-      fd.append('lng', lng);
+      const dados = {
+        nota: inputNota.value.trim(),
+        placa: inputPlaca.value.trim(),
+        motorista: inputMotorista.value.trim(),
+        lat: lat,
+        lng: lng,
+        nome: nomePDF,
+        file: pdfBase64,
+        isPDF: true   // flag para o Apps Script saber que é PDF
+      };
 
-      fetch(URL_SALVAR_PDF, { method: 'POST', body: fd })
-        .then(r => r.text())
-        .then(() => {
-          document.getElementById('loading').style.display = 'none';
-          okMsg.innerHTML = "PDF enviado com sucesso!";
-          const msg = `Entrega ${inputNota.value.trim()} – ${fotos.length} foto(s) em PDF\nMotorista: ${inputMotorista.value.trim()}\nPlaca: ${inputPlaca.value.trim()}\nhttps://maps.google.com/?q=${lat},${lng}`;
-          window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
-          setTimeout(()=>location.reload(), 4000);
-        })
-        .catch(() => {
-          document.getElementById('loading').style.display = 'none';
-          alert("Erro no envio. Verifique a conexão e tente novamente.");
-          btnEnviar.disabled = false;
-        });
+      fetch(URL_SALVAR_ENTREGA, {
+        method: 'POST',
+        body: JSON.stringify(dados),
+        headers: {'Content-Type': 'text/plain'},
+        mode: 'no-cors'
+      }).then(() => {
+        document.getElementById('loading').style.display = 'none';
+        okMsg.innerHTML = "PDF enviado com sucesso!";
+        const msg = `Entrega ${dados.nota} – ${fotos.length} foto(s) em PDF\nMotorista: ${dados.motorista}\nPlaca: ${dados.placa}\nhttps://maps.google.com/?q=${lat},${lng}`;
+        window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+        setTimeout(()=>location.reload(), 4000);
+      }).catch(() => {
+        document.getElementById('loading').style.display = 'none';
+        alert("Erro no envio. Tente novamente.");
+        btnEnviar.disabled = false;
+      });
     }
   </script>
 </body>
