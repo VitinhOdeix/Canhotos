@@ -48,7 +48,7 @@
     <button onclick="iniciar()" id="btnIniciar" style="display:none">Iniciar Comprovante</button>
     <div class="fotos" id="fotos" style="display:none"></div>
     <div id="progress-container"><div id="progress-bar"></div></div>
-    <button onclick="enviar()" id="env" style="display:none">Enviar para Transportadora</button> <!-- ← CORRIGIDO AQUI -->
+    <button onclick="enviar()" id="env" style="display:none">Enviar para Transportadora</button>
     <p id="ok"></p>
   </div>
 
@@ -70,7 +70,6 @@
     const URL_VERIFICACAO_PLACAS = 'https://script.google.com/macros/s/AKfycbwx02Qirtq2QNhzvR1ACqF4W_ZmBHcS3NgVvVDe1MEg2HnHtNJxWdvpWfP-mSyASuGimw/exec';
     const URL_SALVAR_ENTREGA = 'https://script.google.com/macros/s/AKfycbzebobzGJGPo0wLwDI1x6AqhDOmhRBZkwsdX2MZkPSBNDOB7euORuKnwbbzeIVbVILzhQ/exec';
 
-    /* ===== TODO O CÓDIGO QUE JÁ FUNCIONAVA 100% ANTES ===== */
     function bloquearFormulario() {
       inputMotorista.disabled = true;
       inputNota.disabled = true;
@@ -79,6 +78,7 @@
       containerFotos.style.display = 'none';
       btnEnviar.style.display = 'none';
     }
+
     function liberarFormulario() {
       inputMotorista.disabled = false;
       inputNota.disabled = false;
@@ -87,19 +87,29 @@
       containerFotos.style.display = 'block';
       okMsg.innerHTML = '<span style="color:green">Placa válida! Preencha os dados.</span>';
     }
+
     bloquearFormulario();
 
+    // === VERIFICAÇÃO DE PLACA 100% ESTÁVEL EM TODOS OS CELULARES ===
     inputPlaca.addEventListener('input', function(e) {
       let v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
       if (v.length > 7) v = v.slice(0,7);
       e.target.value = v;
 
-      if (v.length === 7 && validarPlaca(v)) {
-        verificarPlacaNoGoogleSheets(v);
+      okMsg.innerHTML = '';
+
+      if (v.length === 7) {
+        if (validarPlaca(v)) {
+          clearTimeout(window.checkPlacaTimeout);
+          window.checkPlacaTimeout = setTimeout(() => {
+            verificarPlacaNoGoogleSheets(v);
+          }, 600);
+        } else {
+          bloquearFormulario();
+          okMsg.innerHTML = '<span style="color:red">Placa inválida (ex: ABC1D23)</span>';
+        }
       } else {
         bloquearFormulario();
-        okMsg.innerHTML = '';
-        placaValida = false;
       }
     });
 
@@ -114,11 +124,24 @@
       fetch(URL_VERIFICACAO_PLACAS)
         .then(res => res.json())
         .then(data => {
-          if (data.error) { okMsg.innerHTML = `<span style="color:red">Erro: ${data.error}</span>`; bloquearFormulario(); return; }
-          if (data.placas && data.placas.includes(placa)) { placaValida = true; liberarFormulario(); }
-          else { placaValida = false; bloquearFormulario(); okMsg.innerHTML = '<span style="color:red">Placa não autorizada!</span>'; }
+          if (data.error) {
+            okMsg.innerHTML = `<span style="color:red">Erro: ${data.error}</span>`;
+            bloquearFormulario();
+            return;
+          }
+          if (data.placas && data.placas.includes(placa)) {
+            placaValida = true;
+            liberarFormulario();
+          } else {
+            placaValida = false;
+            bloquearFormulario();
+            okMsg.innerHTML = '<span style="color:red">Placa não autorizada!</span>';
+          }
         })
-        .catch(() => { okMsg.innerHTML = '<span style="color:red">Erro de conexão. Tente novamente.</span>'; bloquearFormulario(); });
+        .catch(() => {
+          okMsg.innerHTML = '<span style="color:red">Erro de conexão. Tente novamente.</span>';
+          bloquearFormulario();
+        });
     }
 
     function formatarDataHora() {
@@ -210,7 +233,7 @@
       btnEnviar.style.display = fotos.length > 0 ? 'block' : 'none';
     }
 
-    // ===== AQUI É A ÚNICA FUNÇÃO NOVA (mantive o nome antigo "enviar") =====
+    // === ENVIO COMO PDF (mantido o nome "enviar" para não quebrar nada) ===
     async function enviar() {
       if (fotos.length === 0) return alert("Tire pelo menos uma foto!");
 
@@ -232,7 +255,6 @@
         const x = (pw - w) / 2;
         const y = 10;
         pdf.addImage(dataUrl, 'JPEG', x, y, w, h);
-
         pdf.setFontSize(10);
         pdf.text(`Nota: ${inputNota.value.trim()} | Motorista: ${inputMotorista.value.trim()} | Placa: ${inputPlaca.value.trim()}`, 10, ph - 10);
         pdf.text(`GPS: ${lat}, ${lng} | ${formatarDataHora()}`, 10, ph - 5);
